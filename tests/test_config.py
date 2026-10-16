@@ -49,6 +49,39 @@ def test_missing_file_uses_defaults():
     assert cfg.transport["serial_port"] == "/dev/ttyUSB0"
 
 
+def test_weather_config_defaults():
+    reset_config_singleton()
+    cfg = Config("nonexistent.yaml")
+    assert cfg.weather == {
+        "api_url": "http://noaa-ct:8765",
+        "timeout_seconds": 60,
+    }
+
+
+def test_weather_config_env_override(monkeypatch, temp_config_dir):
+    reset_config_singleton()
+    monkeypatch.setenv("CITADEL_WEATHER__API_URL", "http://weather:9000")
+    config_path = os.path.join(temp_config_dir, "config.yaml")
+    write_config(config_path, "weather:\n  timeout_seconds: 15")
+    cfg = Config(config_path)
+    assert cfg.weather["api_url"] == "http://weather:9000"
+    assert cfg.weather["timeout_seconds"] == 15
+
+
+@pytest.mark.parametrize("weather", [
+    "api_url: ftp://weather:9000",
+    "api_url: http://weather:9000?token=x",
+    "timeout_seconds: 0",
+    "timeout_seconds: .nan",
+])
+def test_invalid_weather_config_is_rejected(temp_config_dir, weather):
+    reset_config_singleton()
+    config_path = os.path.join(temp_config_dir, "config.yaml")
+    write_config(config_path, f"weather:\n  {weather}")
+    with pytest.raises(AssertionError):
+        Config(config_path)
+
+
 def test_bad_yaml_format(temp_config_dir):
     reset_config_singleton()
     config_path = os.path.join(temp_config_dir, "config.yaml")

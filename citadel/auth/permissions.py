@@ -48,6 +48,7 @@ ACTION_REQUIREMENTS = {
     "stop": PermissionInfo(level=PermissionLevel.TWIT,
                            description="stop messages"),
     "validate_users": PermissionInfo(level=PermissionLevel.AIDE, description="validate users"),
+    "weather": PermissionInfo(level=PermissionLevel.USER, description="request a weather forecast"),
 }
 
 
@@ -84,10 +85,13 @@ def is_allowed(action: str, user, room=None) -> bool:
             "read_new_messages",
             "scan_messages",
             "ignore_room",
+            "weather",
         ]
         if action in read_actions and not room.can_user_read(user):
             log.debug(
                 f"{action} is not allowed in {room} because {user} can't read from this room")
+            return False
+        if action == "weather" and room.room_id != SystemRoomIDs.WX_ID:
             return False
         if action == "enter_message" and not room.can_user_post(user):
             log.debug(
@@ -99,6 +103,15 @@ def is_allowed(action: str, user, room=None) -> bool:
 
 
 def permission_denied(session_id, action: str, user, room=None):
+    from citadel.room.room import SystemRoomIDs
+    if action == "weather" and (
+            room is None or room.room_id != SystemRoomIDs.WX_ID):
+        return ToUser(
+            session_id=session_id,
+            text="Weather commands are available in wx. Use C wx.",
+            is_error=True,
+            error_code="wrong_room",
+        )
     requirement = ACTION_REQUIREMENTS.get(action)
     if requirement:
         do_action = requirement.description

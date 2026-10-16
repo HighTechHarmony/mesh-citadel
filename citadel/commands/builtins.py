@@ -15,6 +15,14 @@ from citadel.workflows.base import WorkflowContext, WorkflowState
 
 log = logging.getLogger(__name__)
 
+WEATHER_ROOM_HINT = "Weather: syn (synopsis), nt (near term), st (short term), lt (long term)."
+
+
+def room_entry_text(room, text):
+    if room.room_id == SystemRoomIDs.WX_ID:
+        return f"{text}\n{WEATHER_ROOM_HINT}"
+    return text
+
 # -------------------
 # Core user commands
 # -------------------
@@ -134,17 +142,22 @@ class GoNextUnreadCommand(BaseCommand):
             if lobby_has_unread:
                 return ToUser(
                     session_id=context.session_id,
-                    text=f"You are now in room '{new_room.name}'. New messages are available in other rooms."
+                    text=room_entry_text(
+                        new_room,
+                        f"You are now in room '{new_room.name}'. New messages are available in other rooms.")
                 )
             else:
                 return ToUser(
                     session_id=context.session_id,
-                    text=f"You are now in room '{new_room.name}'. No rooms with unread messages found."
+                    text=room_entry_text(
+                        new_room,
+                        f"You are now in room '{new_room.name}'. No rooms with unread messages found.")
                 )
 
         return ToUser(
             session_id=context.session_id,
-            text=f"You are now in room '{new_room.name}'."
+            text=room_entry_text(
+                new_room, f"You are now in room '{new_room.name}'.")
         )
 
 
@@ -460,7 +473,8 @@ class ChangeRoomCommand(BaseCommand):
             context.session_id, next_room.room_id)
         return ToUser(
             session_id=context.session_id,
-            text=f"You are now in room '{next_room.name}'."
+            text=room_entry_text(
+                next_room, f"You are now in room '{next_room.name}'.")
         )
 
 

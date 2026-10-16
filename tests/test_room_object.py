@@ -253,7 +253,49 @@ async def test_system_rooms_initialization(db, config, setup_rooms, setup_users)
 
     twit = await db.execute('SELECT prev_neighbor, next_neighbor FROM rooms WHERE id = ?', (SystemRoomIDs.TWIT_ID,))
     assert twit[0][0] == SystemRoomIDs.SYSTEM_ID, "Twit room should link back to System room"
-    assert twit[0][1] is None, "Twit should be last room (next_neighbor = NULL)"
+    assert twit[0][1] == SystemRoomIDs.WX_ID
+
+    wx = await db.execute('SELECT name, read_only, permission_level, prev_neighbor, next_neighbor FROM rooms WHERE id = ?', (SystemRoomIDs.WX_ID,))
+    assert wx[0] == ("wx", 1, PermissionLevel.USER.value, SystemRoomIDs.TWIT_ID, None)
+
+
+@pytest.mark.asyncio
+async def test_weather_room_upgrade_preserves_user_room_chain(db, config):
+    from citadel.db.initializer import initialize_system_rooms
+
+    await db.execute("INSERT INTO rooms (id, name, description, permission_level, prev_neighbor, next_neighbor) VALUES (100, 'User Room', '', 2, 6, NULL)")
+    await db.execute("UPDATE rooms SET next_neighbor = 100 WHERE id = 6")
+    await db.execute("INSERT INTO messages (sender, content, timestamp) VALUES ('sysop', 'Existing forecast note', '2026-10-16T00:00:00Z')")
+    await db.execute("INSERT INTO room_messages (room_id, message_id, timestamp) VALUES (7, 1, '2026-10-16T00:00:00Z')")
+
+    await initialize_system_rooms(db, config)
+    await initialize_system_rooms(db, config)
+
+    chain = await db.execute("SELECT id, prev_neighbor, next_neighbor FROM rooms WHERE id IN (6, 7, 100) ORDER BY id")
+    assert chain == [
+        (6, 5, 7),
+        (7, 6, 100),
+        (100, 7, None),
+    ]
+    preserved_message = await db.execute("SELECT content FROM messages WHERE id = 1")
+    assert preserved_message == [("Existing forecast note",)]
+
+
+@pytest.mark.asyncio
+async def test_weather_room_name_collision_fails_without_rewriting_chain(db, config):
+    from citadel.db.initializer import initialize_system_rooms
+
+    await db.execute("UPDATE rooms SET name = 'Weather' WHERE id = ?",
+                     (SystemRoomIDs.WX_ID,))
+    await db.execute("INSERT INTO rooms (id, name, description, permission_level) VALUES (100, 'wx', '', 2)")
+
+    with pytest.raises(RuntimeError, match="already used by room 100"):
+        await initialize_system_rooms(db, config)
+
+    links = await db.execute(
+        "SELECT next_neighbor FROM rooms WHERE id = ?",
+        (SystemRoomIDs.TWIT_ID,))
+    assert links == [(SystemRoomIDs.WX_ID,)]
 
 
 @pytest.mark.asyncio

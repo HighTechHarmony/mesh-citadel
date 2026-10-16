@@ -15,6 +15,7 @@ from citadel.workflows.base import WorkflowContext
 
 # Import to register built-in commands
 import citadel.commands.builtins  # noqa: F401
+import citadel.commands.weather  # noqa: F401
 
 log = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ class CommandProcessor:
         self.msg_mgr = MessageManager(config, db)
         self.validator = InputValidator(session_mgr)
 
-    async def process(self, packet: FromUser) -> ToUser:
+    async def process(self, packet: FromUser) -> ToUser | list[ToUser]:
         # 1. Validate input packet
         validation_error = self.validator.validate(packet)
         if validation_error:

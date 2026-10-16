@@ -1,5 +1,5 @@
 system: &system
-  name: "Tae's alpha BBS"
+  name: "Scott's Attic BBS"
 
 bbs:
   <<: *system
@@ -10,9 +10,9 @@ bbs:
   starting_room: "Lobby"
   system_events_room: "System"
   export_format: "json"             # "csv", "json", or "yaml"
-  timezone: "US/Pacific"
+  timezone: "US/Eastern"
   date_format: "%d%b%y %H:%M"       # see https://strftime.org/
-  # System room names (changeable but rooms IDs 1-6 are reserved)
+  # System room names (IDs 1-7 are reserved)
   room_names:
     lobby: "Lobby"                  # Room ID 1
     mail: "Mail"                    # Room ID 2
@@ -20,6 +20,7 @@ bbs:
     sysop: "Sysop"                  # Room ID 4
     system: "System"                # Room ID 5
     twit: "Purgatory"               # Room ID 6
+    wx: "wx"                         # Room ID 7
   forbidden_usernames:              # names we don't want users to register
     - "citadel"
     - "system"
@@ -29,6 +30,7 @@ bbs:
     - "system"
     - "aide"
     - "twit"
+    - "wx"
     - "unverified"
   registration:
     terms_required: true
@@ -38,7 +40,11 @@ bbs:
   3. No illegal content\n
   4. This is a welcoming, friendly community; respect all other members\n
   5. Sysop/aide decisions are final\n"
-  welcome_message: "Tae's BBS, 1st Citadel on the mesh. Log in, or type 'new' to register"
+  welcome_message: "Scott's Attic meshsite offering wx and local resources. Log in, or type 'new' to register"
+
+weather:
+  api_url: "http://noaa-ct:8765"
+  timeout_seconds: 60
 
 
 auth:
@@ -54,20 +60,20 @@ auth:
 transport:
   meshcore:                           # any change to mc requires restart
     <<: *system                       # import the system name
-    serial_port: "/dev/ttyACM0"
+    serial_port: "/dev/ttyUSB1"
     baud_rate: 115200
 
     frequency: 910.525                # MHz
     bandwidth: 62.5                   # kHz
     spreading_factor: 7
     coding_rate: 5
-    tx_power: 1                       # dBm
+    tx_power: 20                       # dBm
 
     watchdog_timeout: 60              # seconds
     watchdog_reset: 30                # this should always be smaller than 
                                       # the timeout
 
-    advert_interval: 8                # hours
+    advert_interval: 1                # hours
     flood_advert: true                # should BBS adverts flood
 
     max_retries: 5                    # max total retries, flood and path
@@ -85,7 +91,7 @@ transport:
 
 database:
   db_path: "citadel.db"             # (restart required)
-  use_memory: true                  # much faster on SD cards, but risks 
+  use_memory: false                  # much faster on SD cards, but risks 
                                     # losing data in a crash
   persist_timer: 300                # seconds between saving DB to disk
 

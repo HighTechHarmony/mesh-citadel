@@ -15,13 +15,14 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class SystemRoomIDs:
-    # Reserved system room IDs (1-6)
+    # Reserved system room IDs (1-7)
     LOBBY_ID = 1
     MAIL_ID = 2
     AIDES_ID = 3
     SYSOP_ID = 4
     SYSTEM_ID = 5
     TWIT_ID = 6
+    WX_ID = 7
 
     @classmethod
     def as_set(cls):
@@ -48,6 +49,7 @@ class Room:
             SystemRoomIDs.SYSOP_ID: room_names.get('sysop', 'Sysop'),
             SystemRoomIDs.SYSTEM_ID: room_names.get('system', 'System'),
             SystemRoomIDs.TWIT_ID: room_names.get('twit', 'Purgatory'),
+            SystemRoomIDs.WX_ID: room_names.get('wx', 'wx'),
         }
 
     def __init__(self, db, config, identifier: int | str):

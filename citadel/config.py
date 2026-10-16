@@ -2,6 +2,8 @@ import os
 import yaml
 import copy
 import logging
+import math
+from urllib.parse import urlsplit
 
 log = logging.getLogger(__name__)
 
@@ -41,6 +43,10 @@ class Config:
         },
         "database": {
             "db_path": "citadel.db",
+        },
+        "weather": {
+            "api_url": "http://noaa-ct:8765",
+            "timeout_seconds": 60,
         },
         "logging": {
             "log_level": "INFO",
@@ -86,6 +92,7 @@ class Config:
         self.auth = raw["auth"]
         self.transport = raw["transport"]
         self.database = raw["database"]
+        self.weather = raw["weather"]
         self.logging = raw["logging"]
 
         self._reboot_snapshot = {
@@ -120,6 +127,7 @@ class Config:
         self.auth = new_raw["auth"]
         self.transport = new_raw["transport"]
         self.database = new_raw["database"]
+        self.weather = new_raw["weather"]
         self.logging = new_raw["logging"]
 
     def _apply_env_overrides(self, raw):
@@ -167,3 +175,14 @@ class Config:
         assert isinstance(cfg["auth"]["session_timeout"],
                           int), "auth.session_timeout must be int"
         assert cfg["database"]["db_path"], "database.db_path is required"
+        api_url = cfg["weather"]["api_url"]
+        assert isinstance(api_url, str) and api_url.strip(), \
+            "weather.api_url must be a non-empty HTTP(S) URL"
+        parsed_url = urlsplit(api_url)
+        assert parsed_url.scheme in {"http", "https"} and parsed_url.hostname \
+            and not parsed_url.query and not parsed_url.fragment, \
+            "weather.api_url must be an HTTP(S) URL without query or fragment"
+        timeout = cfg["weather"]["timeout_seconds"]
+        assert isinstance(timeout, (int, float)) and not isinstance(timeout, bool) \
+            and math.isfinite(timeout) and timeout > 0, \
+            "weather.timeout_seconds must be a positive finite number"

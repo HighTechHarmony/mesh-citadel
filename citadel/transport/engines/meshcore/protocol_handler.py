@@ -126,6 +126,7 @@ class ProtocolHandler:
     async def send_to_node(self, node_id: str, username: str, message: Union[str, ToUser, List]) -> bool:
         """Send a message to a mesh node via MeshCore. Returns False if
         the message couldn't be sent."""
+        verbatim = isinstance(message, ToUser) and message.hints.get("verbatim")
         if isinstance(message, ToUser):
             if message.message:
                 log.debug("Formatting BBS message")
@@ -137,7 +138,15 @@ class ProtocolHandler:
 
         max_packet_length = self.mc_config.get("max_packet_size", 140)
 
-        chunks = self._chunk_message(text, max_packet_length)
+        if verbatim:
+            if (not isinstance(text, str) or not text.isascii()
+                    or any(not 0x20 <= ord(char) <= 0x7E for char in text)
+                    or len(text.encode("ascii")) > max_packet_length):
+                log.error("Refusing invalid or oversized verbatim MeshCore message")
+                return False
+            chunks = [text]
+        else:
+            chunks = self._chunk_message(text, max_packet_length)
         inter_packet_delay = self.mc_config.get("inter_packet_delay", 0.5)
 
         for chunk in chunks:

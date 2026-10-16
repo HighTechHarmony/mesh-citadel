@@ -1,0 +1,100 @@
+system: &system
+  name: "Scott's Attic BBS"
+
+bbs:
+  <<: *system
+  max_messages_per_room: 300        # (restart required)
+  max_rooms: 50                     # (restart required)
+  max_users: 300                    # (restart required)
+  mail_message_limit: 50
+  starting_room: "Lobby"
+  system_events_room: "System"
+  export_format: "json"             # "csv", "json", or "yaml"
+  timezone: "US/Eastern"
+  date_format: "%d%b%y %H:%M"       # see https://strftime.org/
+  # System room names (IDs 1-7 are reserved)
+  room_names:
+    lobby: "Lobby"                  # Room ID 1
+    mail: "Mail"                    # Room ID 2
+    aides: "Aides"                  # Room ID 3
+    sysop: "Sysop"                  # Room ID 4
+    system: "System"                # Room ID 5
+    twit: "Purgatory"               # Room ID 6
+    wx: "wx"                         # Room ID 7
+  forbidden_usernames:              # names we don't want users to register
+    - "citadel"
+    - "system"
+    - "sysop"
+    - "admin"
+    - "administrator"
+    - "system"
+    - "aide"
+    - "twit"
+    - "wx"
+    - "unverified"
+  registration:
+    terms_required: true
+    terms: "To register, agree to these conditions:\n
+  1. Bigotry or hatred are not tolerated\n
+  2. Be kind; assume best intent\n
+  3. No illegal content\n
+  4. This is a welcoming, friendly community; respect all other members\n
+  5. Sysop/aide decisions are final\n"
+  welcome_message: "Scott's Attic meshsite offering wx and local resources. Log in, or type 'new' to register"
+
+weather:
+  api_url: "http://noaa-ct:8765"
+  timeout_seconds: 60
+
+
+auth:
+  session_timeout: 3600             # seconds
+  max_password_length: 64
+  max_username_length: 32
+  password_cache_duration: 14 # days
+  recovery_questions:
+    - "What is your favorite color?"
+    - "What was your first pet's name?"
+    - "Who was your favorite teacher?"
+
+transport:
+  meshcore:                           # any change to mc requires restart
+    <<: *system                       # import the system name
+    serial_port: "/dev/ttyUSB1"
+    baud_rate: 115200
+
+    frequency: 910.525                # MHz
+    bandwidth: 62.5                   # kHz
+    spreading_factor: 7
+    coding_rate: 5
+    tx_power: 20                       # dBm
+
+    watchdog_timeout: 60              # seconds
+    watchdog_reset: 30                # this should always be smaller than 
+                                      # the timeout
+
+    advert_interval: 1                # hours
+    flood_advert: true                # should BBS adverts flood
+
+    max_retries: 5                    # max total retries, flood and path
+    max_flood_attempts: 3             # flood mode retries
+    flood_after: 2                    # switch to flood after N attempts
+    inter_packet_delay: 6             # seconds between packets
+    max_packet_size: 150              # calculated: 184 (MAX_PACKET_PAYLOAD) - 9 (headers) - 15 (encryption padding)
+    multi_acks: true                  # send multiple acks per msg
+    contact_manager:
+      max_device_contacts: 300
+      contact_limit_buffer: 10
+      update_contacts: false          # copy DB contacts to node on startup
+  cli:
+    socket: "/tmp/mesh-citadel-cli.sock"
+
+database:
+  db_path: "citadel.db"             # (restart required)
+  use_memory: false                  # much faster on SD cards, but risks 
+                                    # losing data in a crash
+  persist_timer: 300                # seconds between saving DB to disk
+
+logging:
+  log_level: "INFO"
+  log_file_path: "citadel.log"

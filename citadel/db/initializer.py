@@ -158,13 +158,48 @@ async def initialize_database(db_manager, config=None):
 
 
 async def initialize_system_rooms(db_manager, config):
-    """Initialize the five core system rooms that must always exist."""
+    """Initialize system rooms while preserving the existing room chain."""
     from citadel.room.room import Room, SystemRoomIDs
 
     log.info("Initializing system rooms...")
 
     # Get room names from config
     room_names = Room.get_system_room_names(config)
+
+    wx_id = SystemRoomIDs.WX_ID
+    wx_name = room_names[wx_id]
+    existing_wx = await db_manager.execute(
+        "SELECT name, next_neighbor FROM rooms WHERE id = ?", (wx_id,))
+    if existing_wx and existing_wx[0][0].casefold() not in {
+        "wx", "weather", wx_name.casefold()
+    }:
+        raise RuntimeError(
+            f"Reserved weather room ID {wx_id} is already used by "
+            f"'{existing_wx[0][0]}'. Rename or remove that room before startup.")
+
+    name_conflict = await db_manager.execute(
+        "SELECT id FROM rooms WHERE name = ? COLLATE NOCASE AND id != ?",
+        (wx_name, wx_id))
+    if name_conflict:
+        raise RuntimeError(
+            f"Weather room name '{wx_name}' is already used by room "
+            f"{name_conflict[0][0]}. Choose another bbs.room_names.wx value.")
+
+    tail = await db_manager.execute(
+        "SELECT next_neighbor FROM rooms WHERE id = ?",
+        (SystemRoomIDs.TWIT_ID,))
+    old_tail_next = tail[0][0] if tail else None
+    wx_next = existing_wx[0][1] if existing_wx else None
+    if old_tail_next == wx_id:
+        continuation = wx_next
+    elif wx_next is None:
+        continuation = old_tail_next
+    elif old_tail_next is None or old_tail_next == wx_next:
+        continuation = wx_next
+    else:
+        raise RuntimeError(
+            "Weather room and room 6 have conflicting navigation links. "
+            "Repair the room chain before startup.")
 
     # System room definitions: (id, name, description, permission_level)
     system_rooms = [
@@ -180,9 +215,11 @@ async def initialize_system_rooms(db_manager, config):
          "System events and logs", PermissionLevel.SYSOP.value),
         (SystemRoomIDs.TWIT_ID, room_names[SystemRoomIDs.TWIT_ID],
          "Limited access room", PermissionLevel.TWIT.value),
+        (SystemRoomIDs.WX_ID, wx_name,
+         "On-demand weather forecasts", PermissionLevel.USER.value),
     ]
 
-    # Set up linear room chain: NULL <- 1 <-> 2 <-> 3 <-> 4 <-> 5 -> NULL
+    # Set up reserved rooms; weather reconnects to the existing room tail.
     for i, (room_id, name, description, permission_level) in enumerate(system_rooms):
         # NULL for first room
         prev_id = system_rooms[i-1][0] if i > 0 else None
@@ -219,5 +256,18 @@ async def initialize_system_rooms(db_manager, config):
                 VALUES (?, ?, ?, FALSE, ?, ?, ?)
             """, (room_id, name, description, permission_level, prev_id, next_id))
             log.debug(f'Creating new {name} entry')
+
+    await db_manager.execute("""
+        UPDATE rooms
+        SET name = ?, description = ?, read_only = TRUE,
+            permission_level = ?, prev_neighbor = ?, next_neighbor = ?
+        WHERE id = ?""",
+                            (wx_name, "On-demand weather forecasts",
+                             PermissionLevel.USER.value,
+                             SystemRoomIDs.TWIT_ID, continuation, wx_id))
+    if continuation is not None:
+        await db_manager.execute(
+            "UPDATE rooms SET prev_neighbor = ? WHERE id = ?",
+            (wx_id, continuation))
 
     log.info("System rooms initialized successfully")

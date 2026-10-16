@@ -169,6 +169,11 @@ class MessageRouter:
                 return
 
             if isinstance(touser, list):
+                if touser and all(msg.hints.get("verbatim") for msg in touser):
+                    for msg in touser:
+                        await self.session_mgr.send_msg(session_id, msg)
+                    return
+
                 last_msg = len(touser) - 1
 
                 for i, msg in enumerate(touser):
@@ -179,6 +184,9 @@ class MessageRouter:
                         await self.send_msg_header(session_id, len(touser))
                     await self.session_mgr.send_msg(session_id, msg)
             else:
+                if touser.hints.get("verbatim"):
+                    await self.session_mgr.send_msg(session_id, touser)
+                    return
                 touser = await self.insert_prompt(session_id, touser)
                 await self.session_mgr.send_msg(session_id, touser)
 

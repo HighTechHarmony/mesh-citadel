@@ -6,6 +6,17 @@ designed to run on a solar-powered Raspberry Pi Zero and a low-power
 nRF52-based LoRa node running the USB companion firmware via
 py-meshcore.
 
+# Fork Enhancements
+
+This fork adds an automatically provisioned `wx` room for on-demand NOAA
+forecast summaries. Configure the service URL and request timeout with
+`weather.api_url` and `weather.timeout_seconds` in `config.yaml`.
+
+From `wx`, use `syn` for synopsis, `nt` for near term, `st` for short term, or
+`lt` for long term. Forecast sentences are sent separately and in order, each
+marked with its position and total (for example, `(1/3)`). A sentence is
+shortened with an ellipsis when needed to fit a radio packet.
+
 # In Progress
 
 Last updated Mon Nov  3 10:38:50 PST 2025
@@ -20,6 +31,7 @@ things that are working right now:
 * User registration
 * Login
 * Room navigation
+* On-demand NOAA weather summaries in the `wx` room
 * Reading messages
 * Entering messages
 * Sending Mail (private messages)
@@ -94,6 +106,23 @@ to go to.  It's case insensitive, but requires an exact match.  This is
 how to get to the Mail room to send a private message to someone.  Send
 "C Lobby" to change to the Lobby, for instance, or "C mail" to change
 to the Mail room.
+
+### Weather forecasts
+
+Enter the `wx` room with `C wx`. Request a forecast with one of these commands:
+
+* `syn` for the synopsis
+* `nt` for the near-term forecast
+* `st` for the short-term forecast
+* `lt` for the long-term forecast
+
+Each returned sentence is sent as its own MeshCore message and ends with its
+position and total, such as `(1/3)`. Long sentences may be shortened to fit a
+radio packet. The forecast service is configured with `weather.api_url` in
+`config.yaml` and defaults to `http://noaa-ct:8765`. Set `weather.timeout_seconds` to adjust the request
+timeout (default 60 seconds). The equivalent environment overrides are
+`CITADEL_WEATHER__API_URL` and `CITADEL_WEATHER__TIMEOUT_SECONDS`. If the API
+cannot provide a valid summary, the BBS reports that weather is unavailable.
 
 ### (W)ho's online
 
