@@ -28,9 +28,17 @@ def test_weather_aliases_are_registered(alias, section):
 
 @pytest.mark.parametrize("alias,section", [
     ("syn", "synopsis"),
+    ("SYN", "synopsis"),
+    ("SyN", "synopsis"),
     ("nt", "near_term"),
+    ("NT", "near_term"),
+    ("Nt", "near_term"),
     ("st", "short_term"),
+    ("ST", "short_term"),
+    ("St", "short_term"),
     ("lt", "long_term"),
+    ("LT", "long_term"),
+    ("Lt", "long_term"),
 ])
 def test_weather_aliases_parse_as_commands(alias, section):
     command = TextParser().parse_command(alias)
