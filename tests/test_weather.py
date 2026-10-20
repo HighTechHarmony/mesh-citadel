@@ -172,8 +172,17 @@ async def test_weather_command_only_requests_in_wx(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_weather_command_returns_ordered_verbatim_sentences(monkeypatch):
-    fetch = AsyncMock(return_value=["Rain is likely.", "Winds  increase tonight."])
-    monkeypatch.setattr(weather, "fetch_summary", fetch)
+    events = []
+
+    async def fetch(*args):
+        events.append("request_started")
+        return ["Rain is likely.", "Winds  increase tonight."]
+
+    async def send_msg(session_id, message):
+        events.append("acknowledgement_queued")
+
+    fetch_mock = AsyncMock(side_effect=fetch)
+    monkeypatch.setattr(weather, "fetch_summary", fetch_mock)
 
     class FakeUser:
         async def load(self):
@@ -197,7 +206,8 @@ async def test_weather_command_returns_ordered_verbatim_sentences(monkeypatch):
         session_id="session",
         session_mgr=SimpleNamespace(
             get_session_state=lambda session_id: SimpleNamespace(
-                current_room=7, username="user")),
+                current_room=7, username="user"),
+            send_msg=send_msg),
         config=SimpleNamespace(weather={"api_url": "http://weather/",
                                         "timeout_seconds": 10},
                               transport={"meshcore": {"max_packet_size": 150}}),
@@ -209,7 +219,8 @@ async def test_weather_command_returns_ordered_verbatim_sentences(monkeypatch):
     assert [item.text for item in response] == [
         "Rain is likely. (1/2)", "Winds  increase tonight. (2/2)"]
     assert all(item.hints == {"verbatim": True} for item in response)
-    fetch.assert_awaited_once_with("http://weather/", "near_term", 10)
+    assert events == ["acknowledgement_queued", "request_started"]
+    fetch_mock.assert_awaited_once_with("http://weather/", "near_term", 10)
 
 
 def test_wx_room_entry_includes_weather_hint_only_for_wx():

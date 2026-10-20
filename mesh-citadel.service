@@ -1,0 +1,26 @@
+[Unit]
+Description=Mesh-Citadel BBS
+After=network.target
+
+[Service]
+Type=simple
+User=scott
+Group=scott
+SupplementaryGroups=dialout
+WorkingDirectory=/home/scott/mesh-citadel
+ExecStart=/usr/bin/python3 /home/scott/mesh-citadel/main.py --config /home/scott/mesh-citadel/config.yaml
+Restart=on-failure
+RestartSec=10
+KillSignal=SIGINT
+TimeoutStopSec=30
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mesh-citadel
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/home/scott/mesh-citadel /tmp
+
+[Install]
+WantedBy=multi-user.target

@@ -193,6 +193,27 @@ it'll respond.
 If you have it running locally, you can run the `cli_client.py` script
 to get a local console that's a little bit like a MeshCore connection.
 
+### Running as a systemd service
+
+The repository includes [mesh-citadel.service](./mesh-citadel.service) for this
+checkout's `/home/scott/mesh-citadel` path and `scott` service account. Install
+the Python requirements for `/usr/bin/python3`, ensure that the service account
+can access the configured serial device (the unit includes the `dialout` group),
+then install and start the unit:
+
+```sh
+sudo cp mesh-citadel.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now mesh-citadel.service
+sudo systemctl status mesh-citadel.service
+```
+
+If the checkout or service account differs, update `WorkingDirectory`,
+`ExecStart`, `ReadWritePaths`, `User`, and `Group` in the unit before
+installing it. View logs with `journalctl -u mesh-citadel.service`. The service
+uses SIGINT when stopped so the BBS can shut down cleanly and persist its
+database.
+
 The first user to log in is automatically granted sysop powers, so
 be sure you log in (probably with the CLI client) _before_ you put it
 on the air.  If anything goes sideways, you can always delete the

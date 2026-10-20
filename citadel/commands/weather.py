@@ -11,6 +11,7 @@ from citadel.transport.packets import ToUser
 from citadel.user.user import User
 
 log = logging.getLogger(__name__)
+WEATHER_ACKNOWLEDGEMENT = "Request received; please wait while the forecast is generated."
 
 WEATHER_SECTIONS = {
     "SYN": "synopsis",
@@ -138,6 +139,12 @@ class WeatherCommand(BaseCommand):
                 is_error=True,
                 error_code="weather_unavailable",
             )
+
+        await context.session_mgr.send_msg(
+            context.session_id,
+            ToUser(session_id=context.session_id,
+                   text=WEATHER_ACKNOWLEDGEMENT),
+        )
         try:
             sentences = await fetch_summary(
                 context.config.weather["api_url"], self.section,
