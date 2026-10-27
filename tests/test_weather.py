@@ -49,12 +49,7 @@ def test_weather_aliases_parse_as_commands(alias, section):
     None,
     {"section": "short_term", "sentences": ["Rain."]},
     {"section": "near_term", "sentences": []},
-    {"section": "near_term", "sentences": ["Rain."] * 5},
-    {"section": "near_term", "sentences": [""]},
-    {"section": "near_term", "sentences": ["é"]},
-    {"section": "near_term", "sentences": ["line\nbreak"]},
-    {"section": "near_term", "sentences": ["x" * 134]},
-    {"section": "near_term", "sentences": ["x" * 133] * 5},
+    {"section": "near_term", "sentences": "Rain."},
 ])
 def test_invalid_summaries_are_rejected(payload):
     with pytest.raises(weather.WeatherServiceError):
@@ -62,11 +57,52 @@ def test_invalid_summaries_are_rejected(payload):
 
 
 def test_summary_sentences_are_preserved():
-    sentences = ["Rain is likely.", "  Winds increase tonight."]
+    sentences = ["Rain is likely.", "  Winds increase tonight.\r\n"]
     assert weather.validate_summary(
         {"section": "near_term", "sentences": sentences,
          "summary": "Ignored joined value"},
-        "near_term") == sentences
+        "near_term") == ["Rain is likely.", "Winds increase tonight."]
+
+
+def test_summary_sanitizes_ascii_and_punctuation():
+    payload = {
+        "section": "near_term",
+        "sentences": ["Caf\u00e9 \u2014 rain is likely\nWinds increase"],
+    }
+
+    assert weather.validate_summary(payload, "near_term") == [
+        "Cafe - rain is likely Winds increase."]
+
+
+def test_summary_truncates_long_sentence_and_caps_sentence_count():
+    payload = {
+        "section": "near_term",
+        "sentences": ["A forecast sentence that is much too long " * 8] +
+                     ["More rain."] * 4,
+    }
+
+    sentences = weather.validate_summary(payload, "near_term")
+
+    assert len(sentences) == 4
+    assert all(len(sentence) <= 133 for sentence in sentences)
+    assert sentences[0].endswith("...")
+    assert sum(map(len, sentences)) <= 532
+
+
+def test_summary_discards_unusable_entries_but_keeps_valid_ones():
+    payload = {
+        "section": "near_term",
+        "sentences": [None, "\n\t", "Rain is likely"],
+    }
+
+    assert weather.validate_summary(payload, "near_term") == ["Rain is likely."]
+
+
+def test_summary_rejects_response_with_no_usable_sentences():
+    payload = {"section": "near_term", "sentences": [None, "\n\t"]}
+
+    with pytest.raises(weather.WeatherServiceError, match="no usable sentences"):
+        weather.validate_summary(payload, "near_term")
 
 
 def test_numbered_sentences_include_total_and_fit_packet_limit():
@@ -133,6 +169,37 @@ async def test_fetch_summary_handles_http_error(monkeypatch):
 
     with pytest.raises(weather.WeatherServiceError):
         await weather.fetch_summary("http://weather", "synopsis", 10)
+
+
+@pytest.mark.asyncio
+async def test_fetch_summary_preserves_safe_http_error_detail(monkeypatch):
+    monkeypatch.setattr(
+        weather.requests, "get",
+        lambda *args, **kwargs: FakeResponse(
+            502, {"detail": "  Ollama   rejected the summary request  "}))
+
+    with pytest.raises(weather.WeatherServiceError,
+                       match="HTTP 502: Ollama rejected the summary request"):
+        await weather.fetch_summary("http://weather", "synopsis", 10)
+
+
+@pytest.mark.asyncio
+async def test_fetch_summary_logs_structured_proxy_diagnostics(monkeypatch):
+    diagnostics = {
+        "endpoint": "http://upstream:11434/api/generate",
+        "upstream_port": 11434,
+        "content_type": "text/plain",
+        "upstream_body": "model unavailable",
+    }
+    monkeypatch.setattr(
+        weather.requests, "get",
+        lambda *args, **kwargs: FakeResponse(502, {"detail": diagnostics}))
+
+    with pytest.raises(weather.WeatherServiceError) as error:
+        await weather.fetch_summary("http://weather", "synopsis", 10)
+
+    for diagnostic in diagnostics.values():
+        assert str(diagnostic) in str(error.value)
 
 
 @pytest.mark.asyncio

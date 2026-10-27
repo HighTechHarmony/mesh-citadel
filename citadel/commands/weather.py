@@ -1,5 +1,7 @@
 import asyncio
+import json
 import logging
+import unicodedata
 
 import requests
 
@@ -12,6 +14,18 @@ from citadel.user.user import User
 
 log = logging.getLogger(__name__)
 WEATHER_ACKNOWLEDGEMENT = "Request received; please wait while the forecast is generated."
+ASCII_PUNCTUATION = {
+    "\u2010": "-",
+    "\u2011": "-",
+    "\u2012": "-",
+    "\u2013": "-",
+    "\u2014": "-",
+    "\u2018": "'",
+    "\u2019": "'",
+    "\u201c": '"',
+    "\u201d": '"',
+    "\u2026": "...",
+}
 
 WEATHER_SECTIONS = {
     "SYN": "synopsis",
@@ -25,25 +39,65 @@ class WeatherServiceError(Exception):
     """The weather service returned an unavailable or invalid response."""
 
 
+def _sanitize_sentence(sentence):
+    normalized = unicodedata.normalize("NFKD", sentence)
+    printable = []
+    for char in normalized:
+        if ord(char) < 128:
+            printable.append(char if 0x20 <= ord(char) <= 0x7E else " ")
+        elif not unicodedata.combining(char):
+            printable.append(ASCII_PUNCTUATION.get(char, " "))
+
+    sentence = " ".join("".join(printable).split())
+    if not sentence:
+        return None, False
+
+    if sentence[-1] not in ".!?":
+        sentence += "."
+
+    truncated = len(sentence) > 133
+    if truncated:
+        prefix = sentence[:130]
+        boundary = prefix.rfind(" ")
+        if boundary >= 65:
+            prefix = prefix[:boundary]
+        sentence = f"{prefix.rstrip()}..."
+    return sentence, truncated
+
+
 def validate_summary(payload, expected_section):
     if not isinstance(payload, dict) or payload.get("section") != expected_section:
         raise WeatherServiceError("Weather service returned an invalid section")
 
     sentences = payload.get("sentences")
-    if not isinstance(sentences, list) or not 1 <= len(sentences) <= 4:
+    if not isinstance(sentences, list) or not sentences:
         raise WeatherServiceError("Weather service returned invalid sentences")
 
-    total_length = 0
+    sanitized = []
+    invalid_count = 0
+    truncated_count = 0
     for sentence in sentences:
-        if not isinstance(sentence, str) or not sentence.strip():
-            raise WeatherServiceError("Weather service returned invalid text")
-        if len(sentence) > 133 or any(not 0x20 <= ord(char) <= 0x7E for char in sentence):
-            raise WeatherServiceError("Weather sentence cannot be sent as one packet")
-        total_length += len(sentence)
+        if not isinstance(sentence, str):
+            invalid_count += 1
+            continue
+        clean_sentence, truncated = _sanitize_sentence(sentence)
+        if clean_sentence is None:
+            invalid_count += 1
+            continue
+        sanitized.append(clean_sentence)
+        truncated_count += truncated
 
-    if total_length > 532:
-        raise WeatherServiceError("Weather service returned too much text")
-    return sentences
+    if invalid_count or truncated_count or len(sanitized) > 4:
+        log.warning(
+            "Adjusted weather summary for %s: discarded=%s truncated=%s "
+            "excess_sentences=%s",
+            expected_section, invalid_count, truncated_count,
+            max(0, len(sanitized) - 4))
+
+    sanitized = sanitized[:4]
+    if not sanitized:
+        raise WeatherServiceError("Weather service returned no usable sentences")
+    return sanitized
 
 
 def number_sentences(sentences, max_packet_size):
@@ -68,8 +122,23 @@ async def fetch_summary(api_url, section, timeout_seconds):
         with requests.get(url, timeout=timeout_seconds,
                           allow_redirects=False) as response:
             if not 200 <= response.status_code < 300:
+                try:
+                    error_payload = response.json()
+                except ValueError:
+                    error_payload = response.text
+                if isinstance(error_payload, dict):
+                    diagnostic = error_payload.get("detail", error_payload)
+                else:
+                    diagnostic = error_payload
+                if not isinstance(diagnostic, str):
+                    diagnostic = json.dumps(diagnostic, ensure_ascii=True,
+                                            default=str)
+                diagnostic = " ".join(diagnostic.split())[:5000]
+                error = f"Weather service returned HTTP {response.status_code}"
+                if diagnostic:
+                    error = f"{error}: {diagnostic}"
                 raise WeatherServiceError(
-                    f"Weather service returned HTTP {response.status_code}")
+                    error)
             return response.json()
 
     try:
